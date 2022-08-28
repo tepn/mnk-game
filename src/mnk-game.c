@@ -18,16 +18,16 @@ static void usage(int status) {
 			"Usage: mnk-game [OPTION] [-c FILE]\n"
 			"Allow to play to mnk-games with chosen values for m, n or k.\n"
 			"\n"
-			" -m, --set-m M  \tset the value of m to M\n"
-			" -n, --set-n N  \tset the value of n to N\n"
-			" -k, --set-k K  \tset the value of k to K\n"
-			" -0, --all-ai   \tset both player to be an AI\n"
-			" -1, --player1-ai\tset first player as an AI\n"
-			" -2, --player2-ai\tset second player as an AI\n"
-			" -c, --contest FILE\tenable 'contestmode'\n"
-			" -v, --verbose  \tverbose output\n"
-			" -V, --version  \tdisplay version and exit\n"
-			" -h, --help \t\tdisplay this help\n"
+			" -m, --set-m M       set the value of m to M\n"
+			" -n, --set-n N       set the value of n to N\n"
+			" -k, --set-k K       set the value of k to K\n"
+			" -0, --all-ai        set both player to be an AI\n"
+			" -1, --player1-ai    set first player as an AI\n"
+			" -2, --player2-ai    set second player as an AI\n"
+			" -c, --contest FILE  enable 'contest mode'\n"
+			" -v, --verbose       verbose output\n"
+			" -V, --version       display version and exit\n"
+			" -h, --help          display this help\n"
 			"\n", stdout);
 	} else {
 		fprintf(stderr, "Try 'mnk-game --help' for more information.\n");
@@ -36,7 +36,8 @@ static void usage(int status) {
 }
 
 static void version(void) {
-	printf("mnk-game %i.%i.%i\nThis software is an mnk-game with AI players.\n",
+	printf("mnk-game %i.%i.%i\n"
+		"This software is an mnk-game with AI players.\n",
 		PROG_VERSION, PROG_SUBVERSION, PROG_REVISION);
 }
 
@@ -44,16 +45,16 @@ int main(int argc, char* argv[]) {
 	int optc = 0;
 	
 	static struct option long_opts[] = {
-		{"set-m", required_argument, NULL, 'm'},
-		{"set-n", required_argument, NULL, 'n'},
-		{"set-k", required_argument, NULL, 'k'},
-		{"all-ai", no_argument, NULL, '0'},
-		{"player1-ai", no_argument, NULL, '1'},
-		{"player2-ai", no_argument, NULL, '2'},
-		{"contest", required_argument, NULL, 'c'},
-		{"verbose", no_argument, NULL, 'v'},
-		{"version", no_argument, NULL, 'V'},
-		{"help", no_argument, NULL, 'h'},
+		{"set-m",      required_argument, NULL, 'm'},
+		{"set-n",      required_argument, NULL, 'n'},
+		{"set-k",      required_argument, NULL, 'k'},
+		{"all-ai",     no_argument,       NULL, '0'},
+		{"player1-ai", no_argument,       NULL, '1'},
+		{"player2-ai", no_argument,       NULL, '2'},
+		{"contest",    required_argument, NULL, 'c'},
+		{"verbose",    no_argument,       NULL, 'v'},
+		{"version",    no_argument,       NULL, 'V'},
+		{"help",       no_argument,       NULL, 'h'},
 		{NULL, 0, NULL, 0}
 	};
 	
@@ -65,8 +66,7 @@ int main(int argc, char* argv[]) {
 					m = atoi(optarg);
 				} else {
 					fprintf(stderr,
-						"Argument invalid, -m must be between 1 and %i\n"
-						"Try 'mnk-game --help' fore more information.\n",
+						"Argument invalid, -m must be between 1 and %i\n",
 						BOARD_MAX);
 					exit(EXIT_FAILURE);
 				}
@@ -77,8 +77,7 @@ int main(int argc, char* argv[]) {
 					n = atoi(optarg);
 				} else {
 					fprintf(stderr,
-						"Argument invalid, -n must be between 1 and %i\n"
-						"Try 'mnk-game --help' fore more information.\n",
+						"Argument invalid, -n must be between 1 and %i\n",
 						BOARD_MAX);
 					exit(EXIT_FAILURE);
 				}
@@ -89,8 +88,7 @@ int main(int argc, char* argv[]) {
 					k = atoi(optarg);
 				} else {
 					fprintf(stderr,
-						"Argument invalid, -k must be between 1 and %i\n"
-						"Try 'mnk-game --help' fore more information.\n",
+						"Argument invalid, -k must be between 1 and %i\n",
 						BOARD_MAX);
 					exit(EXIT_FAILURE);
 				}
@@ -128,6 +126,5 @@ int main(int argc, char* argv[]) {
 				usage(EXIT_FAILURE);
 		}
 	}
-	printf("%d\n", m);
 	return EXIT_SUCCESS;
 }
