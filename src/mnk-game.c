@@ -1,13 +1,24 @@
+#define _POSIX_C_SOURCE 200809L
 #include "mnk-game.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
+#include <aio.h>
 #include <assert.h>
+#include <ctype.h>
 #include <math.h>
 #include <getopt.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
+
+typedef struct
+{
+	unsigned int line;
+	unsigned int column;
+} move_t;
 
 /* Set default values */
 static bool verbose = false;
@@ -397,9 +408,344 @@ game(char** board)
 
 }
 
+char**
+parse_input(char* player, FILE* input_file)
+{
+	/* Parse input_file file.
+	First get 'k'.
+	Then get the character used for each player.
+	Finally retrieve the state of the board. */
+
+	const char comment = '#';
+	const char* whitespaces = " \t\n";
+	int k_value = -1;
+	char stone_p1, stone_p2;
+
+	/* Read header */
+	char* line = NULL;
+	size_t len = 0;
+
+	/* Retrieve 'k' */
+	while ((getline(&line, &len, input_file)) != -1)
+	{
+		char* cursor = strtok(line, whitespaces);
+
+		if ((cursor != NULL) && (*cursor != comment))
+		{
+			int length = strlen(cursor);
+
+			for (int i = 0; i < length; i++)
+			{
+				if (!isdigit(cursor[i]))
+				{
+					fprintf(stderr, "Invalid value for k = %s.\n", cursor);
+					free(line);
+					fclose(input_file);
+					exit(EXIT_FAILURE);
+				}
+			}
+
+			k_value = atoi(cursor);
+			break;
+
+		}
+
+	}
+
+	if (k_value == -1)
+	{
+		fprintf(stderr, "No value found for k\n");
+		free(line);
+		fclose(input_file);
+		exit(EXIT_FAILURE);
+	}
+
+	if (verbose)
+	{
+		printf("Read header from file:\n");
+		printf("k = %i\n", k_value);
+	}
+
+	/* Retrieve Character for player 1 and 2 */
+	while ((getline(&line, &len, input_file)) != -1)
+	{
+		char* cursor = strtok(line, whitespaces);
+
+		if ((cursor != NULL) && (*cursor != comment))
+		{
+			if (strlen(cursor) != 1)
+			{
+				fprintf(stderr, "Error\n");
+				free(line);
+				fclose(input_file);
+				exit(EXIT_FAILURE);
+			}
+
+			stone_p1 = cursor[0];
+
+			cursor = strtok(NULL, whitespaces);
+
+			if (strlen(cursor) != 1)
+			{
+				fprintf(stderr, "Error\n");
+				free(line);
+				fclose(input_file);
+				exit(EXIT_FAILURE);
+			}
+
+			stone_p2 = cursor[0];
+
+			break;
+
+		}
+
+	}
+
+	free(line);
+
+	/* Validate stones for players */
+	if ((stone_p1 == '_') || (stone_p2 == '_') || (stone_p1 == stone_p2))
+	{
+		fprintf(stderr, "Invalid stone for players\n");
+		fclose(input_file);
+		exit(EXIT_FAILURE);
+	}
+
+	if (verbose)
+	{
+		printf("P1 : '%c'\n", stone_p1);
+		printf("P2 : '%c'\n", stone_p2);
+	}
+
+	/* Scan Grid */
+	char board_tmp[BOARD_MAX][BOARD_MAX]; /* temporary board to track stones */
+	int m_value = 0;
+	int n_value = 0;
+	int i = 0;
+	int j = 0;
+	int stones_p1 = 0;
+	int stones_p2 = 0;
+
+	char current_char;
+	int ignore = false; /* in case of comment, ignore the rest of the line */
+	int board_line = false; /* true when the line read had data from board */
+	int scan_first_row = false; /* true if first row had been scanned */
+
+	/* initialize temporary board to empty board */
+	for (int i = 0; i < BOARD_MAX; i++)
+	{
+		for (int j = 0; j < BOARD_MAX; j++)
+		{
+			board_tmp[i][j] = NONE;
+		}
+	}
+
+	while((current_char = fgetc(input_file)) != EOF)
+	{
+		switch(current_char)
+		{
+			/* filter out blank character */
+		case ' ':
+		case '\t':
+			break;
+
+		default:
+			/* character treatment here */
+			if (current_char == comment)
+			{
+				ignore = true;
+			}
+			else if (current_char == '\n')
+			{
+				if (board_line)
+				{
+					if (!scan_first_row)
+					{
+						scan_first_row = true;
+						n_value = j;
+					}
+					else
+					{
+						if (n_value != j)
+						{
+							fprintf(stderr, "Invalid number of column at line "
+								"%i\n", i);
+							fclose(input_file);
+							exit(EXIT_FAILURE);
+						}
+					}
+
+					j = 0;
+					i++;
+					m_value++;
+
+				}
+
+				ignore = false;
+				board_line = false;
+
+			}
+			else if ((current_char == stone_p1) && (!ignore))
+			{
+				stones_p1++;
+				board_tmp[i][j] = PLAYER1;
+				j++;
+				board_line = true;
+			}
+			else if ((current_char == stone_p2) && (!ignore))
+			{
+				stones_p2++;
+				board_tmp[i][j] = PLAYER2;
+				j++;
+				board_line = true;
+			}
+			else if ((current_char == '_') && (!ignore))
+			{
+				j++;
+				board_tmp[i][j] = NONE;
+				board_line = true;
+			}
+			else if (!ignore)
+			{
+				fprintf(stderr, "Invalid character '%c' at line %i\n",
+					current_char, i);
+				fclose(input_file);
+				exit(EXIT_FAILURE);
+			}
+
+			break;
+		}
+	}
+
+	if (board_line)
+	{
+		if (!scan_first_row)
+		{
+			n_value = j;
+		}
+		else
+		{
+			if (n_value != j)
+			{
+				fprintf(stderr, "Invalid number of column at line %i\n", i);
+				fclose(input_file);
+				exit(EXIT_FAILURE);
+			}
+		}
+
+		m_value++;
+
+	}
+
+	/* Check information */
+	if ((m_value > BOARD_MAX) || (n_value > BOARD_MAX))
+	{
+		fprintf(stderr, "'m' or 'n' exceed the maximum value %i.\n", BOARD_MAX);
+		fclose(input_file);
+		exit(EXIT_FAILURE);
+	}
+
+	if ((k <= 0) || ((k > m_value) && (k > n_value)))
+	{
+		fprintf(stderr, "'k' = %i is invalid.\n", k_value);
+		fclose(input_file);
+		exit(EXIT_FAILURE);
+	}
+
+	m = m_value;
+	n = n_value;
+	k = k_value;
+
+	if (verbose)
+	{
+		printf("m = %i\n", m);
+		printf("n = %i\n", n);
+		printf("\n");
+	}
+
+	/* place recorded stones on board */
+	char** board = board_alloc();
+
+	for (int i = 0; i < m; i++)
+	{
+		for (int j = 0; j < n; j++)
+		{
+			board[i][j] = board_tmp[i][j];
+		}
+	}
+
+	/* Scanning state of grid */
+	if ((m_value == 0) || (n_value == 0))
+	{
+		fprintf(stderr, "Board unreadable.\n");
+		fclose(input_file);
+		exit(EXIT_FAILURE);
+	}
+
+	if (stones_p1 < stones_p2)
+	{
+		fprintf(stderr, "Missing stones for player 1.\n");
+		fclose(input_file);
+		exit(EXIT_FAILURE);
+	}
+
+	if (stones_p1 > stones_p2 + 1)
+	{
+		fprintf(stderr, "Missing stones for player 2.\n");
+		fclose(input_file);
+		exit(EXIT_FAILURE);
+	}
+
+	if (is_winner(board) != NONE)
+	{
+		fprintf(stderr, "A player already won the game\n");
+		fclose(input_file);
+		exit(EXIT_FAILURE);
+	}
+
+	if (m * n == stones_p1 + stones_p2)
+	{
+		fprintf(stderr, "This is a drawed game.\n");
+		fclose(input_file);
+		exit(EXIT_FAILURE);
+	}
+
+	player[0] = (stones_p1 == stones_p2) ? PLAYER1 : PLAYER2;
+	board_print(board);
+
+	return board;
+}
+
+move_t
+play(int player, char** board)
+{
+	/* Return a random free position to play */
+	move_t position;
+	bool valid = false;
+
+	srand(time(NULL));
+	while (!valid)
+	{
+		position.line = (rand() % m);
+		position.column = (rand() % n);
+
+		if (board[position.line][position.column] == NONE)
+		{
+			valid = true;
+		}
+	}
+
+	printf("Player %c will play :\n", player);
+	printf("<%i> <%i>\n", position.line + 1, position.column + 1);
+
+	return position;
+}
+
 static void
-usage(int status) {
-	if (status == EXIT_SUCCESS) {
+usage(int status)
+{
+	if (status == EXIT_SUCCESS)
+	{
 		fputs(
 			"Usage: mnk-game [OPTION] [-c FILE]\n"
 			"Allow to play to mnk-games with chosen values for m, n or k.\n"
@@ -415,14 +761,17 @@ usage(int status) {
 			" -V, --version       display version and exit\n"
 			" -h, --help          display this help\n"
 			"\n", stdout);
-	} else {
+	}
+	else
+	{
 		fprintf(stderr, "Try 'mnk-game --help' for more information.\n");
 	}
 	exit(status);
 }
 
 static void
-version(void) {
+version(void)
+{
 	printf("mnk-game %i.%i.%i\n"
 		"This software is an mnk-game with AI players.\n",
 		PROG_VERSION, PROG_SUBVERSION, PROG_REVISION);
@@ -430,10 +779,14 @@ version(void) {
 
 /* Main */
 int
-main(int argc, char* argv[]) {
+main(int argc, char* argv[])
+{
 	int optc = 0;
+	int contest = false;
+	FILE* input_file = NULL;
 	
-	static struct option long_opts[] = {
+	static struct option long_opts[] =
+	{
 		{"set-m",      required_argument, NULL, 'm'},
 		{"set-n",      required_argument, NULL, 'n'},
 		{"set-k",      required_argument, NULL, 'k'},
@@ -448,12 +801,17 @@ main(int argc, char* argv[]) {
 	};
 	
 	while ((optc =
-		getopt_long(argc, argv, "m:n:k:012c:vVh", long_opts, NULL)) != -1) {
-		switch(optc) {
+		getopt_long(argc, argv, "m:n:k:012c:vVh", long_opts, NULL)) != -1)
+	{
+		switch(optc)
+		{
 			case 'm': /* 'm' option */
-				if ((atoi(optarg) > 0) && (atoi(optarg) <= BOARD_MAX)) {
+				if ((atoi(optarg) > 0) && (atoi(optarg) <= BOARD_MAX))
+				{
 					m = atoi(optarg);
-				} else {
+				}
+				else
+				{
 					fprintf(stderr,
 						"Argument invalid, -m must be between 1 and %i\n",
 						BOARD_MAX);
@@ -462,9 +820,12 @@ main(int argc, char* argv[]) {
 				break;
 
 			case 'n': /* 'n' option */
-				if ((atoi(optarg) > 0) && (atoi(optarg) <= BOARD_MAX)) {
+				if ((atoi(optarg) > 0) && (atoi(optarg) <= BOARD_MAX))
+				{
 					n = atoi(optarg);
-				} else {
+				}
+				else
+				{
 					fprintf(stderr,
 						"Argument invalid, -n must be between 1 and %i\n",
 						BOARD_MAX);
@@ -473,9 +834,12 @@ main(int argc, char* argv[]) {
 				break;
 
 			case 'k': /* 'k' option */
-				if ((atoi(optarg) > 0) && (atoi(optarg) <= BOARD_MAX)) {
+				if ((atoi(optarg) > 0) && (atoi(optarg) <= BOARD_MAX))
+				{
 					k = atoi(optarg);
-				} else {
+				}
+				else
+				{
 					fprintf(stderr,
 						"Argument invalid, -k must be between 1 and %i\n",
 						BOARD_MAX);
@@ -496,7 +860,16 @@ main(int argc, char* argv[]) {
 				break;
 
 			case 'c': /* contest option */
-				printf("Unimplemented yet\n");
+				input_file = fopen(optarg, "r+");
+
+				if (input_file == NULL)
+				{
+					fprintf(stderr, "An error occured while opening the file : "
+						"'%s\n",
+						optarg);
+					exit(EXIT_FAILURE);
+				}
+				contest = true;
 				break;
 
 			case 'v': /* verbose option */
@@ -516,29 +889,58 @@ main(int argc, char* argv[]) {
 		}
 	}
 
-	/* Game loop */
-	char** board = board_alloc();
-	int turn = 0;
-
-	while(turn < m * n)
+	/* Validate arguments */
+	if ((k > m) && (k > n))
 	{
-		char winner = game(board);
-
-		if (winner != NONE)
-		{
-			board_print(board);
-			printf("The winner is '%c' !\n", winner);
-			board_free(board);
-			exit(EXIT_SUCCESS);
-		}
-
-		turn++;
-
+		fprintf(stderr, "Argument invalid : -k can't be greater than m or n.\n"
+			"Try 'mnk-game --help' for more information.\n");
+		exit(EXIT_FAILURE);
 	}
 
-	board_print(board);
-	printf("No winner, this is a draw.\n");
-	board_free(board);
+	/* Game */
+	char** board;
+	if (contest)
+	{
+		char current_player[BUFFER_SIZE];
+
+		/* Mode contest */
+		board = parse_input(current_player, input_file);
+
+		move_t position = play(*current_player, board);
+
+		board_set(*current_player, position.line, position.column, board);
+
+		board_print(board);
+
+		board_free(board);
+		fclose(input_file);
+	}
+	else
+	{
+		/* Game loop Hmn vs Hmn */
+		board = board_alloc();
+		int turn = 0;
+
+		while(turn < m * n)
+		{
+			char winner = game(board);
+
+			if (winner != NONE)
+			{
+				board_print(board);
+				printf("The winner is '%c' !\n", winner);
+				board_free(board);
+				exit(EXIT_SUCCESS);
+			}
+
+			turn++;
+
+		}
+
+		board_print(board);
+		printf("No winner, this is a draw.\n");
+		board_free(board);
+	}
 
 	return EXIT_SUCCESS;
 }
