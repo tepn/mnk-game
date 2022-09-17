@@ -13,14 +13,16 @@ GDBFLAGS=-g -DDEBUG
 
 all: $(EXE)
 
-${EXE}: mnk-game.c mnk-game.h
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ mnk-game.c $(LDFLAGS)
+${EXE}: mnk-game.c mnk-game.h board.c ../include/board.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ mnk-game.c board.c $(LDFLAGS)
 
 debug: mnk-game.c mnk-game.h
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $(EXEGDB) mnk-game.c $(LDFLAGS) $(GDBFLAGS)
+
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $(EXEGDB) mnk-game.c board.c $(LDFLAGS) $(GDBFLAGS)
 
 clean:
 	@rm -rf *.o *~ $(EXE) $(EXEGDB) *~
+	@cd ../include/ && rm -f *~
 
 help:
 	@echo "help mnk-game/src/:"

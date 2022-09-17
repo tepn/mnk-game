@@ -1,18 +1,14 @@
 #define _POSIX_C_SOURCE 200809L
 #include "mnk-game.h"
+#include "board.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
-#include <aio.h>
-#include <assert.h>
 #include <ctype.h>
-#include <math.h>
 #include <getopt.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 typedef struct
 {
@@ -32,328 +28,45 @@ str2index(char str[BUFFER_SIZE])
 {
 	/* Transform a string to decimal.
 	   E.g:
-	   decimal2index("002") = 1
-	   decimal2index("101") = 100  */
-	return atoi(str) - 1;
-}
-
-static char*
-index2str(char buffer[BUFFER_SIZE], int size, int index)
-{
-	/* Transform a decimal to string of a given size.
-
-	   E.g:
-	   index2str(buffer, 3, 5) = "006"
-	   index2str(buffer, 2, 10) = "11"  */
-	int n = floor(log10(index)) + 1;    // Number of digit in index
-	int f = 0;                          // Use for flag
-
-	/* assert */
-	assert(n <= size);
-	assert(n <= BUFFER_SIZE);
-
-	f = snprintf(buffer, size + 1, "%.*d", size, index + 1);
-
-	if (f < 0)
-		return NULL;
-
-	return buffer;
-}
-
-static char**
-board_alloc()
-{
-	/* Allocation of a board of size m by n */
-	char** board = calloc(m, sizeof(char*));
-
-	if (board == NULL)
-	{
-		/* Error in allocation */
-		perror("Error allocation");
-		exit(EXIT_FAILURE);
-	}
-
-	for (int i = 0; i < m; i++)
-	{
-		board[i] = calloc(n, sizeof(char));
-		if (board[i] == NULL)
-		{
-			/* Error in allocation */
-			perror("Error allocation");
-			exit(EXIT_FAILURE);
-		}
-	}
-
-	for (int i = 0; i < m; i++)
-	{
-		for (int j = 0; j < n; j++)
-		{
-			board[i][j] = NONE;
-		}
-	}
-
-	return board;
-}
-
-static void
-board_free(char** board)
-{
-	/* Free the board */
-	for (int i = 0; i < m; i++)
-	{
-		free(board[i]);
-	}
-
-	free(board);
-}
-
-static void
-board_print(char** board)
-{
-	/* Print the state of the board */
-	int digits_m = floor(log10(m)) + 1;    // Number of digit in m
-	int digits_n = floor(log10(n)) + 1;    // Number of digit in n
-	char buffer[BUFFER_SIZE];
-
-	/* Header */
-	for (int i = 0; i < digits_m; i++)
-	{
-		printf("%s", " ");
-	}
-
-	for (int j = 0; j < n; j++)
-	{
-		index2str(buffer, digits_n, j);
-		printf(" %s", buffer);
-	}
-
-	printf("\n");
-
-	/* Content */
-	for (int i = 0; i < m; i++)
-	{
-		index2str(buffer, digits_m, i);
-		printf("%s", buffer);
-
-		for (int j = 0; j < n; j++)
-		{
-			for (int ind = 0; ind < digits_n; ind++)
-			{
-				printf("%s", " ");
-			}
-
-			printf("%c", board[i][j]);
-
-		}
-
-		printf("\n");
-
-	}
-
-	printf("\n");
-
+	   decimal2index("002") = 2
+	   decimal2index("101") = 101  */
+	return atoi(str);
 }
 
 static int
-board_set(char stone, int i, int j, char** board)
-{
-	/* set a stone on board [i][j]
-	   return 0 if valid, -1 otherwise. */
-	if ((i < 0) || (j < 0) || (i >= m) ||(j >= n) || board[i][j] != NONE)
-	{
-		return -1;
-	}
-	else
-	{
-		/* Set the stone */
-		board[i][j] = stone;
-		// turn++
-		return 0;
-	}
-}
-
-static char
-is_winner(char** board)
-{
-	/* Return the winner of the board, Character NONE otherwise. */
-	int count;
-	char winner = NONE;
-
-	/* Read rows */
-	for (int i = 0; i < m; i++)
-	{
-		count = 0;
-
-		for (int j = 0; j < n; j++)
-		{
-			char cursor = board[i][j];
-
-			if (cursor == PLAYER1)
-			{
-				if (winner == PLAYER1)
-				{
-					count++;
-				}
-				else
-				{
-					count = 1;
-					winner = PLAYER1;
-				}
-			}
-			else if (cursor == PLAYER2)
-			{
-
-				if (winner == PLAYER2)
-					count++;
-				else
-				{
-					count = 1;
-					winner = PLAYER2;
-				}
-
-			}
-			else
-				count = 0;
-
-			if (count == k)
-			{
-				printf("Test: Row\n");
-				return winner;
-			}
-		}
-	}
-
-	/* Read columns */
-	for (int j = 0; j < n; j++)
-	{
-		count = 0;
-
-		for (int i = 0; i < m; i++)
-		{
-			char cursor = board[i][j];
-
-			if (cursor == PLAYER1)
-			{
-				if (winner == PLAYER1)
-					count++;
-				else
-				{
-					count = 1;
-					winner = PLAYER1;
-				}
-			}
-			else if (cursor == PLAYER2)
-			{
-
-				if (winner == PLAYER2)
-					count++;
-				else
-				{
-					count = 1;
-					winner = PLAYER2;
-				}
-
-			}
-			else
-				count = 0;
-
-			if (count == k)
-				return winner;
-		}
-	}
-
-	/* Read diagonally (from upper right to bottom left) */
-	for (int i = 0; i < m - k + 1; i++)
-	{
-		count = 0;
-
-		for (int j = k - 1; j > n; j++)
-		{
-			char cursor = board[i][j];
-
-			if (cursor == NONE)
-				count = 0;
-			else
-			{
-				winner = cursor;
-				for (int l = 0; l < k; l++)
-				{
-					if (board[i+l][j+l] == winner)
-						count++;
-					else
-						count = 0;
-				}
-
-				if (count == k)
-					return winner;
-			}
-		}
-	}
-
-	/* Read diagonally (from upper left to bottom right) */
-	for (int i = 0; i < m - k + 1; i++)
-	{
-		count = 0;
-
-		for (int j = n - k + 1; j > n; j++)
-		{
-			char cursor = board[i][j];
-
-			if (cursor == NONE)
-				count = 0;
-			else
-			{
-				winner = cursor;
-				for (int l = 0; l < k; l++)
-				{
-					if (board[i+l][j+l] == winner)
-						count++;
-					else
-						count = 0;
-				}
-
-				if (count == k)
-					return winner;
-			}
-		}
-	}
-
-	return NONE;
-}
-
-static char
-game(char** board)
+game(board_t* board)
 {
 	/* Mechanic of the game for a turn. */
 	bool valid = false;
 
 	printf("\nNumber of stones to align to win (k) = %i)\n\n", k);
-	board_print(board);
+	board_display(board, stdout);
+	printf("\n");
 
 	while (valid == false)
 	{
-		char player;
+		int player;
 
 		/* Get player to play */
 		int stone_X = 0;
 		int stone_O = 0;
 
-		for (int i = 0; i < m; i++)
+		for (int i = 1; i <= m; i++)
 		{
-			for (int j = 0; j < n; j++)
+			for (int j = 1; j <= n; j++)
 			{
-				if (board[i][j] == PLAYER1)
+				if (board_get(board, i, j) == 1)
 					stone_X++;
-				else if (board[i][j] == PLAYER2)
+				else if (board_get(board, i, j) == 2)
 					stone_O++;
 			}
 		}
 
-		player = (stone_X <= stone_O) ? PLAYER1 : PLAYER2;
+		player = (stone_X <= stone_O) ? 1 : 2;
 
 		/* Print state of board and prompt */
 		printf("Player '%c' give your move 'line column' (eg: 1 2), "
-			"press 'Q' to quit: ", player);
+			"press 'Q' to quit: ", (stone_X <= stone_O) ? PLAYER1 : PLAYER2);
 
 		/* Read the input */
 		char buffer[BUFFER_SIZE];
@@ -363,53 +76,50 @@ game(char** board)
 		fgets(buffer, sizeof(buffer), stdin);
 		printf("\n");
 
-		arg = strtok(buffer, " ");
+		arg = strtok(buffer, " \t\n");
 
 		/* Get arguments */
 		int x, y;
 
 		while(arg != NULL)
 		{
-			if ((str2index(arg) != -1) && (arg_i == 0))
+			if ((str2index(arg) != 0) && (arg_i == 0))
 				x = str2index(arg);
-			else if ((str2index(arg) != -1) && (arg_i == 1))
+			else if ((str2index(arg) != 0) && (arg_i == 1))
 			{
 				y = str2index(arg);
 				valid = true;
 			}
 			else if ((*arg == 'Q') || (*arg == 'q'))
 			{
-				board_free(board);
+				board_delete(board);
 				exit(EXIT_SUCCESS);
 			}
 
 			arg_i++;
-			arg = strtok(NULL, " ");
+			arg = strtok(NULL, " \n\t");
 
 		}
 
 		if (valid)
 		{
-			if (board_set(player, x, y, board) == 0)
+			if (board_set(board, player, x, y) != 1)
 			{
-				if (player == PLAYER1)
-					player = PLAYER2;
-				else
-					player = PLAYER1;
-			}
-			else
 				printf("Invalid move\n");
+			}
 		}
 		else
+		{
 			printf("Invalid syntaxe\n");
+		}
 	}
 
-	return is_winner(board);
+	return board_win(board, k);
 
 }
 
-char**
-parse_input(char* player, FILE* input_file)
+board_t*
+parse_input(int* player, FILE* input_file)
 {
 	/* Parse input_file file.
 	First get 'k'.
@@ -518,11 +228,11 @@ parse_input(char* player, FILE* input_file)
 	}
 
 	/* Scan Grid */
-	char board_tmp[BOARD_MAX][BOARD_MAX]; /* temporary board to track stones */
+	board_t* board_tmp = board_new(BOARD_MAX, BOARD_MAX);
 	int m_value = 0;
 	int n_value = 0;
-	int i = 0;
-	int j = 0;
+	int i = 1;
+	int j = 1;
 	int stones_p1 = 0;
 	int stones_p2 = 0;
 
@@ -530,15 +240,6 @@ parse_input(char* player, FILE* input_file)
 	int ignore = false; /* in case of comment, ignore the rest of the line */
 	int board_line = false; /* true when the line read had data from board */
 	int scan_first_row = false; /* true if first row had been scanned */
-
-	/* initialize temporary board to empty board */
-	for (int i = 0; i < BOARD_MAX; i++)
-	{
-		for (int j = 0; j < BOARD_MAX; j++)
-		{
-			board_tmp[i][j] = NONE;
-		}
-	}
 
 	while((current_char = fgetc(input_file)) != EOF)
 	{
@@ -562,11 +263,11 @@ parse_input(char* player, FILE* input_file)
 					if (!scan_first_row)
 					{
 						scan_first_row = true;
-						n_value = j;
+						n_value = j - 1;
 					}
 					else
 					{
-						if (n_value != j)
+						if (n_value != j - 1)
 						{
 							fprintf(stderr, "Invalid number of column at line "
 								"%i\n", i);
@@ -575,7 +276,7 @@ parse_input(char* player, FILE* input_file)
 						}
 					}
 
-					j = 0;
+					j = 1;
 					i++;
 					m_value++;
 
@@ -588,21 +289,20 @@ parse_input(char* player, FILE* input_file)
 			else if ((current_char == stone_p1) && (!ignore))
 			{
 				stones_p1++;
-				board_tmp[i][j] = PLAYER1;
+				board_set(board_tmp, 1, i, j);
 				j++;
 				board_line = true;
 			}
 			else if ((current_char == stone_p2) && (!ignore))
 			{
 				stones_p2++;
-				board_tmp[i][j] = PLAYER2;
+				board_set(board_tmp, 2, i, j);
 				j++;
 				board_line = true;
 			}
 			else if ((current_char == '_') && (!ignore))
 			{
 				j++;
-				board_tmp[i][j] = NONE;
 				board_line = true;
 			}
 			else if (!ignore)
@@ -621,11 +321,11 @@ parse_input(char* player, FILE* input_file)
 	{
 		if (!scan_first_row)
 		{
-			n_value = j;
+			n_value = j - 1;
 		}
 		else
 		{
-			if (n_value != j)
+			if (n_value != j - 1)
 			{
 				fprintf(stderr, "Invalid number of column at line %i\n", i);
 				fclose(input_file);
@@ -664,15 +364,20 @@ parse_input(char* player, FILE* input_file)
 	}
 
 	/* place recorded stones on board */
-	char** board = board_alloc();
+	board_t* board = board_new(m, n);
 
-	for (int i = 0; i < m; i++)
+	for (int i = 1; i <= board->m; i++)
 	{
-		for (int j = 0; j < n; j++)
+		for (int j = 1; j <= board->n; j++)
 		{
-			board[i][j] = board_tmp[i][j];
+			if (board_get(board_tmp, i, j) != 0)
+			{
+				board_set(board, board_get(board_tmp, i, j), i, j);
+			}
 		}
 	}
+
+	board_delete(board_tmp);
 
 	/* Scanning state of grid */
 	if ((m_value == 0) || (n_value == 0))
@@ -696,7 +401,7 @@ parse_input(char* player, FILE* input_file)
 		exit(EXIT_FAILURE);
 	}
 
-	if (is_winner(board) != NONE)
+	if (board_win(board, k) != 0)
 	{
 		fprintf(stderr, "A player already won the game\n");
 		fclose(input_file);
@@ -710,14 +415,15 @@ parse_input(char* player, FILE* input_file)
 		exit(EXIT_FAILURE);
 	}
 
-	player[0] = (stones_p1 == stones_p2) ? PLAYER1 : PLAYER2;
-	board_print(board);
+	*player = (stones_p1 == stones_p2) ? 1 : 2;
+
+	board_display(board, stdout);
 
 	return board;
 }
 
 move_t
-play(int player, char** board)
+play(int* player, board_t* board)
 {
 	/* Return a random free position to play */
 	move_t position;
@@ -726,17 +432,17 @@ play(int player, char** board)
 	srand(time(NULL));
 	while (!valid)
 	{
-		position.line = (rand() % m);
-		position.column = (rand() % n);
+		position.line = (rand() % m) + 1;
+		position.column = (rand() % n) + 1;
 
-		if (board[position.line][position.column] == NONE)
+		if (board_get(board, position.line, position.column) == 0)
 		{
 			valid = true;
 		}
 	}
 
-	printf("Player %c will play :\n", player);
-	printf("<%i> <%i>\n", position.line + 1, position.column + 1);
+	printf("Player %i will play :\n", *player);
+	printf("<%i> <%i>\n", position.line, position.column);
 
 	return position;
 }
@@ -750,8 +456,8 @@ usage(int status)
 			"Usage: mnk-game [OPTION] [-c FILE]\n"
 			"Allow to play to mnk-games with chosen values for m, n or k.\n"
 			"\n"
-			" -m, --set-m M       set the value of m to M\n"
-			" -n, --set-n N       set the value of n to N\n"
+			" -m, --set-m M       set the width m to M\n"
+			" -n, --set-n N       set the height n to N\n"
 			" -k, --set-k K       set the value of k to K\n"
 			" -0, --all-ai        set both player to be an AI\n"
 			" -1, --player1-ai    set first player as an AI\n"
@@ -849,14 +555,17 @@ main(int argc, char* argv[])
 
 			case '0': /* AI vs AI option */
 				printf("Unimplemented yet\n");
+				exit(EXIT_SUCCESS);
 				break;
 
 			case '1': /* player 1 as an AI option */
 				printf("Unimplemented yet\n");
+				exit(EXIT_SUCCESS);
 				break;
 
 			case '2': /* player 2 as an AI option */
 				printf("Unimplemented yet\n");
+				exit(EXIT_SUCCESS);
 				break;
 
 			case 'c': /* contest option */
@@ -898,48 +607,44 @@ main(int argc, char* argv[])
 	}
 
 	/* Game */
-	char** board;
 	if (contest)
 	{
-		char current_player[BUFFER_SIZE];
-
 		/* Mode contest */
-		board = parse_input(current_player, input_file);
+		int* current_player, p = 0;
+		current_player = &p;
 
-		move_t position = play(*current_player, board);
+		board_t* board = parse_input(current_player, input_file);
 
-		board_set(*current_player, position.line, position.column, board);
+		move_t position = play(current_player, board);
 
-		board_print(board);
+		board_set(board, *current_player, position.line, position.column);
 
-		board_free(board);
+		board_display(board, stdout);
+
+		board_delete(board);
 		fclose(input_file);
 	}
 	else
 	{
 		/* Game loop Hmn vs Hmn */
-		board = board_alloc();
-		int turn = 0;
+		board_t* board = board_new(m, n);
 
-		while(turn < m * n)
+		while (board_count_empty_cells(board) > 0)
 		{
-			char winner = game(board);
+			int winner = game(board);
 
-			if (winner != NONE)
+			if (winner > 0)
 			{
-				board_print(board);
-				printf("The winner is '%c' !\n", winner);
-				board_free(board);
+				board_display(board, stdout);
+				printf("The winner is '%c' !\n", (winner == 1) ? PLAYER1 : PLAYER2);
+				board_delete(board);
 				exit(EXIT_SUCCESS);
 			}
-
-			turn++;
-
 		}
 
-		board_print(board);
+		board_display(board, stdout);
 		printf("No winner, this is a draw.\n");
-		board_free(board);
+		board_delete(board);
 	}
 
 	return EXIT_SUCCESS;
