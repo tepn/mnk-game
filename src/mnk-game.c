@@ -7,14 +7,23 @@
 
 #include <ctype.h>
 #include <getopt.h>
+#include <limits.h>
 #include <string.h>
-#include <time.h>
 
 typedef struct
 {
 	unsigned int line;
 	unsigned int column;
 } move_t;
+
+typedef struct
+{
+	char label; /* 'X' or 'O' */
+	/* Decision procedure, gives a move_t according to a board */
+	move_t (*decision)(board_t *board, const int player, const int k);
+	/* Heuristic function pointer, gives a score to a given position */
+	// int (*heuristic)(const board_t* self, const int k);
+} player_t;
 
 /* Set default values */
 static bool verbose = false;
@@ -45,41 +54,29 @@ game(board_t* board)
 
 	while (valid == false)
 	{
-		int player;
-
-		/* Get player to play */
-		int stone_X = 0;
-		int stone_O = 0;
-
-		for (int i = 1; i <= m; i++)
-		{
-			for (int j = 1; j <= n; j++)
-			{
-				if (board_get(board, i, j) == 1)
-					stone_X++;
-				else if (board_get(board, i, j) == 2)
-					stone_O++;
-			}
-		}
-
-		player = (stone_X <= stone_O) ? 1 : 2;
+		int player = board_get_player(board);
 
 		/* Print state of board and prompt */
 		printf("Player '%c' give your move 'line column' (eg: 1 2), "
-			"press 'Q' to quit: ", (stone_X <= stone_O) ? PLAYER1 : PLAYER2);
+			"press 'Q' to quit: ", (player == 1) ? PLAYER1 : PLAYER2);
 
 		/* Read the input */
 		char buffer[BUFFER_SIZE];
 		char* arg;
 		int arg_i = 0;
 
-		fgets(buffer, sizeof(buffer), stdin);
+		char* input = fgets(buffer, sizeof(buffer), stdin);
 		printf("\n");
+
+		if (input == NULL)
+		{
+			;	// Necessary for optimization purposes
+		}
 
 		arg = strtok(buffer, " \t\n");
 
 		/* Get arguments */
-		int x, y;
+		int x = 0, y = 0;	// Initialyzed for compiled optimization purposes
 
 		while(arg != NULL)
 		{
@@ -92,8 +89,7 @@ game(board_t* board)
 			}
 			else if ((*arg == 'Q') || (*arg == 'q'))
 			{
-				board_delete(board);
-				exit(EXIT_SUCCESS);
+				return -1;
 			}
 
 			arg_i++;
@@ -118,8 +114,19 @@ game(board_t* board)
 
 }
 
+int game_AI(board_t* board, player_t* player)
+{
+	int p = (player->label == PLAYER1) ? 1 : 2;
+	move_t position = player->decision(board, p, k);
+	board_set(board, p, position.line, position.column);
+	board_display(board, stdout);
+	printf("\n");
+
+	return board_win(board, k);
+}
+
 board_t*
-parse_input(int* player, FILE* input_file)
+parse_input(player_t* player, FILE* input_file)
 {
 	/* Parse input_file file.
 	First get 'k'.
@@ -129,7 +136,8 @@ parse_input(int* player, FILE* input_file)
 	const char comment = '#';
 	const char* whitespaces = " \t\n";
 	int k_value = -1;
-	char stone_p1, stone_p2;
+	char stone_p1 = 0x00;	// Initialyzed for compiled optimization purposes
+	char stone_p2 = 0x00;	// Initialyzed for compiled optimization purposes
 
 	/* Read header */
 	char* line = NULL;
@@ -214,7 +222,7 @@ parse_input(int* player, FILE* input_file)
 	free(line);
 
 	/* Validate stones for players */
-	if ((stone_p1 == '_') || (stone_p2 == '_') || (stone_p1 == stone_p2))
+	if ((stone_p1 == NONE) || (stone_p2 == NONE) || (stone_p1 == stone_p2))
 	{
 		fprintf(stderr, "Invalid stone for players\n");
 		fclose(input_file);
@@ -231,8 +239,8 @@ parse_input(int* player, FILE* input_file)
 	board_t* board_tmp = board_new(BOARD_MAX, BOARD_MAX);
 	int m_value = 0;
 	int n_value = 0;
-	int i = 1;
-	int j = 1;
+	int i = 1;	// line
+	int j = 1;	// column
 	int stones_p1 = 0;
 	int stones_p2 = 0;
 
@@ -263,11 +271,11 @@ parse_input(int* player, FILE* input_file)
 					if (!scan_first_row)
 					{
 						scan_first_row = true;
-						n_value = j - 1;
+						m_value = j - 1;
 					}
 					else
 					{
-						if (n_value != j - 1)
+						if (m_value != j - 1)
 						{
 							fprintf(stderr, "Invalid number of column at line "
 								"%i\n", i);
@@ -278,7 +286,7 @@ parse_input(int* player, FILE* input_file)
 
 					j = 1;
 					i++;
-					m_value++;
+					n_value++;
 
 				}
 
@@ -300,7 +308,7 @@ parse_input(int* player, FILE* input_file)
 				j++;
 				board_line = true;
 			}
-			else if ((current_char == '_') && (!ignore))
+			else if ((current_char == NONE) && (!ignore))
 			{
 				j++;
 				board_line = true;
@@ -321,11 +329,11 @@ parse_input(int* player, FILE* input_file)
 	{
 		if (!scan_first_row)
 		{
-			n_value = j - 1;
+			m_value = j - 1;
 		}
 		else
 		{
-			if (n_value != j - 1)
+			if (m_value != j - 1)
 			{
 				fprintf(stderr, "Invalid number of column at line %i\n", i);
 				fclose(input_file);
@@ -333,7 +341,7 @@ parse_input(int* player, FILE* input_file)
 			}
 		}
 
-		m_value++;
+		n_value++;
 
 	}
 
@@ -345,7 +353,7 @@ parse_input(int* player, FILE* input_file)
 		exit(EXIT_FAILURE);
 	}
 
-	if ((k <= 0) || ((k > m_value) && (k > n_value)))
+	if ((k < 1) || ((k > m_value) && (k > n_value)))
 	{
 		fprintf(stderr, "'k' = %i is invalid.\n", k_value);
 		fclose(input_file);
@@ -366,9 +374,9 @@ parse_input(int* player, FILE* input_file)
 	/* place recorded stones on board */
 	board_t* board = board_new(m, n);
 
-	for (int i = 1; i <= board->m; i++)
+	for (int i = 1; i <= board->n; i++)
 	{
-		for (int j = 1; j <= board->n; j++)
+		for (int j = 1; j <= board->m; j++)
 		{
 			if (board_get(board_tmp, i, j) != 0)
 			{
@@ -415,34 +423,122 @@ parse_input(int* player, FILE* input_file)
 		exit(EXIT_FAILURE);
 	}
 
-	*player = (stones_p1 == stones_p2) ? 1 : 2;
+	player->label = (stones_p1 == stones_p2) ? stone_p1 : stone_p1;
 
 	board_display(board, stdout);
 
 	return board;
 }
 
-move_t
-play(int* player, board_t* board)
+int heuristic(board_t* board, const int player, const int k)
 {
-	/* Return a random free position to play */
-	move_t position;
-	bool valid = false;
+	if (board_win(board, k) == 0)
+		return 0;
+	else if (board_win(board, k) == player)
+		return 1;
+	else
+		return -1;
+}
 
-	srand(time(NULL));
-	while (!valid)
+int
+minimax(board_t* board, const int player, const bool maximizingPlayer)
+{
+	/* Apply MiniMax rule to return a move to play without depth limit.
+	src : http://en.wikipedia.org/wiki/Minimax/
+	*/
+
+	if ((board_count_empty_cells(board) == 0) || (board_win(board, k) > 0))
 	{
-		position.line = (rand() % m) + 1;
-		position.column = (rand() % n) + 1;
-
-		if (board_get(board, position.line, position.column) == 0)
+		if (maximizingPlayer)
 		{
-			valid = true;
+			return heuristic(board, player, k);
+		}
+		else
+		{
+			return heuristic(board, player % 2 + 1, k);
 		}
 	}
 
-	printf("Player %i will play :\n", *player);
-	printf("<%i> <%i>\n", position.line, position.column);
+	if (maximizingPlayer == true)
+	{
+		int value = INT_MIN;
+		for (int i = 1; i <= board->n; i++)
+		{
+			for (int j = 1; j <= board->m; j++)
+			{
+				if (board_get(board, i, j) == 0)
+				{
+					board_t* child = board_copy(board);
+					board_set(child, player, i, j);
+					value = MAX(value, minimax(child, player % 2 + 1, false));
+					board_delete(child);
+				}
+			}
+		}
+		return value;
+	}
+	else
+	{
+		int value = INT_MAX;
+		for (int i = 1; i <= board->n; i++)
+		{
+			for (int j = 1; j <= board->m; j++)
+			{
+				if (board_get(board, i, j) == 0)
+				{
+					board_t* child = board_copy(board);
+					board_set(child, player, i, j);
+					value = MIN(value, minimax(child, player % 2 + 1, true));
+					board_delete(child);
+				}
+			}
+		}
+		return value;
+	}
+}
+
+move_t
+minimax_wrapper(board_t* board, const int player, const int k)
+{
+	move_t position;
+	position.line = -1;
+	position.column = -1;
+
+	if ((board_count_empty_cells(board) == 0) || (board_win(board, k) > 0))
+	{
+		return position;
+	}
+
+	int value = INT_MIN;
+	for (int i = 1; i <= board->n; i++)
+	{
+		for (int j = 1; j <= board->m; j++)
+		{
+			if (board_get(board, i, j) == 0)
+			{
+				if (verbose)
+				{
+					printf("[+] Checking <%i,%i> : ", i, j);
+				}
+
+				board_t* child = board_copy(board);
+				board_set(child, player, i, j);
+				if (value < minimax(child, player % 2 + 1, false))
+				{
+					value = minimax(child, player % 2 + 1, false);
+					position.line = i;
+					position.column = j;
+				}
+
+				board_delete(child);
+
+				if (verbose)
+				{
+					printf("%i\n", value);
+				}
+			}
+		}
+	}
 
 	return position;
 }
@@ -462,6 +558,7 @@ usage(int status)
 			" -0, --all-ai        set both player to be an AI\n"
 			" -1, --player1-ai    set first player as an AI\n"
 			" -2, --player2-ai    set second player as an AI\n"
+			" -3, --no-ai         set both player as human (default)\n"
 			" -c, --contest FILE  enable 'contest mode'\n"
 			" -v, --verbose       verbose output\n"
 			" -V, --version       display version and exit\n"
@@ -489,6 +586,7 @@ main(int argc, char* argv[])
 {
 	int optc = 0;
 	int contest = false;
+	int mode = 3;
 	FILE* input_file = NULL;
 	
 	static struct option long_opts[] =
@@ -499,6 +597,7 @@ main(int argc, char* argv[])
 		{"all-ai",     no_argument,       NULL, '0'},
 		{"player1-ai", no_argument,       NULL, '1'},
 		{"player2-ai", no_argument,       NULL, '2'},
+		{"no-ai",      no_argument,       NULL, '3'},
 		{"contest",    required_argument, NULL, 'c'},
 		{"verbose",    no_argument,       NULL, 'v'},
 		{"version",    no_argument,       NULL, 'V'},
@@ -507,7 +606,7 @@ main(int argc, char* argv[])
 	};
 	
 	while ((optc =
-		getopt_long(argc, argv, "m:n:k:012c:vVh", long_opts, NULL)) != -1)
+		getopt_long(argc, argv, "m:n:k:0123c:vVh", long_opts, NULL)) != -1)
 	{
 		switch(optc)
 		{
@@ -554,18 +653,23 @@ main(int argc, char* argv[])
 				break;
 
 			case '0': /* AI vs AI option */
-				printf("Unimplemented yet\n");
-				exit(EXIT_SUCCESS);
+				printf("AI vs AI\n");
+				mode = 0;
 				break;
 
 			case '1': /* player 1 as an AI option */
-				printf("Unimplemented yet\n");
-				exit(EXIT_SUCCESS);
+				printf("Player 1 is an AI\n");
+				mode = 1;
 				break;
 
 			case '2': /* player 2 as an AI option */
-				printf("Unimplemented yet\n");
-				exit(EXIT_SUCCESS);
+				printf("Player 2 is an AI\n");
+				mode = 2;
+				break;
+
+			case '3': /* player vs player option */
+				printf("Player 3 is an AI\n");
+				mode = 3;
 				break;
 
 			case 'c': /* contest option */
@@ -610,42 +714,84 @@ main(int argc, char* argv[])
 	if (contest)
 	{
 		/* Mode contest */
-		int* current_player, p = 0;
-		current_player = &p;
+		player_t* player = malloc(sizeof(player_t));
+		player->decision = &minimax_wrapper;
 
-		board_t* board = parse_input(current_player, input_file);
+		board_t* board = parse_input(player, input_file);
 
-		move_t position = play(current_player, board);
+		move_t position = player->decision(board, board_get_player(board), k);
 
-		board_set(board, *current_player, position.line, position.column);
+		board_set(board, board_get_player(board),
+			position.line, position.column);
 
 		board_display(board, stdout);
 
+		free(player);
 		board_delete(board);
 		fclose(input_file);
 	}
 	else
 	{
-		/* Game loop Hmn vs Hmn */
+		/* Game loop */
 		board_t* board = board_new(m, n);
+
+		player_t* player1 = malloc(sizeof(player_t));
+		player1->label = PLAYER1;
+		player1->decision = &minimax_wrapper;
+
+		player_t* player2 = malloc(sizeof(player_t));
+		player2->label = PLAYER2;
+		player2->decision = &minimax_wrapper;
 
 		while (board_count_empty_cells(board) > 0)
 		{
-			int winner = game(board);
+			int winner = 0;
+			if (board_get_player(board) == 1)
+			{
+				if ((mode == 0) || (mode == 1))
+				{
+					winner = game_AI(board, player1);
+				}
+				else
+				{
+					winner = game(board);
+				}
+			}
+			else
+			{
+				if ((mode == 0) || (mode == 2))
+				{
+					winner = game_AI(board, player2);
+				}
+				else
+				{
+					winner = game(board);
+				}
+			}
 
 			if (winner > 0)
 			{
-				board_display(board, stdout);
-				printf("The winner is '%c' !\n", (winner == 1) ? PLAYER1 : PLAYER2);
+				printf("The winner is '%c' !\n",
+					(winner == 1) ? PLAYER1 : PLAYER2);
+				free(player1);
+				free(player2);
+				board_delete(board);
+				exit(EXIT_SUCCESS);
+			}
+			else if (winner == -1)
+			{
+				free(player1);
+				free(player2);
 				board_delete(board);
 				exit(EXIT_SUCCESS);
 			}
 		}
 
-		board_display(board, stdout);
-		printf("No winner, this is a draw.\n");
+		printf("No winner, this is a draw\n");
+
+		free(player1);
+		free(player2);
 		board_delete(board);
 	}
-
 	return EXIT_SUCCESS;
 }

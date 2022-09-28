@@ -1,0 +1,7 @@
+4 # value of 4
+X O # Characters for first and second player
+# Board description
+_ O
+X X
+_ O
+_ _

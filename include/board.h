@@ -82,4 +82,9 @@ int board_win(const board_t* board, const int k);
 */
 int board_count_empty_cells(const board_t* board);
 
+/*
+	returns the player to play
+*/
+int board_get_player(const board_t* board);
+
 #endif /* BOARD_H */
