@@ -49,8 +49,6 @@ game(board_t* board)
 	bool valid = false;
 
 	printf("\nNumber of stones to align to win (k) = %i)\n\n", k);
-	board_display(board, stdout);
-	printf("\n");
 
 	while (valid == false)
 	{
@@ -119,8 +117,7 @@ int game_AI(board_t* board, player_t* player)
 	int p = (player->label == PLAYER1) ? 1 : 2;
 	move_t position = player->decision(board, p, k);
 	board_set(board, p, position.line, position.column);
-	board_display(board, stdout);
-	printf("\n");
+	printf("Robot plays <%i,%i>\n\n", position.line, position.column);
 
 	return board_win(board, k);
 }
@@ -392,6 +389,8 @@ parse_input(player_t* player, FILE* input_file)
 	{
 		fprintf(stderr, "Board unreadable.\n");
 		fclose(input_file);
+		free(player);
+		board_delete(board);
 		exit(EXIT_FAILURE);
 	}
 
@@ -399,6 +398,8 @@ parse_input(player_t* player, FILE* input_file)
 	{
 		fprintf(stderr, "Missing stones for player 1.\n");
 		fclose(input_file);
+		free(player);
+		board_delete(board);
 		exit(EXIT_FAILURE);
 	}
 
@@ -406,6 +407,8 @@ parse_input(player_t* player, FILE* input_file)
 	{
 		fprintf(stderr, "Missing stones for player 2.\n");
 		fclose(input_file);
+		free(player);
+		board_delete(board);
 		exit(EXIT_FAILURE);
 	}
 
@@ -413,6 +416,8 @@ parse_input(player_t* player, FILE* input_file)
 	{
 		fprintf(stderr, "A player already won the game\n");
 		fclose(input_file);
+		free(player);
+		board_delete(board);
 		exit(EXIT_FAILURE);
 	}
 
@@ -420,6 +425,8 @@ parse_input(player_t* player, FILE* input_file)
 	{
 		fprintf(stderr, "This is a drawed game.\n");
 		fclose(input_file);
+		free(player);
+		board_delete(board);
 		exit(EXIT_FAILURE);
 	}
 
@@ -441,11 +448,9 @@ int heuristic(board_t* board, const int player, const int k)
 }
 
 int
-minimax(board_t* board, const int player, const bool maximizingPlayer)
+minimax(board_t* board, const int player, const int k,
+	const bool maximizingPlayer)
 {
-	/* Apply MiniMax rule to return a move to play without depth limit.
-	src : http://en.wikipedia.org/wiki/Minimax/
-	*/
 
 	if ((board_count_empty_cells(board) == 0) || (board_win(board, k) > 0))
 	{
@@ -470,7 +475,7 @@ minimax(board_t* board, const int player, const bool maximizingPlayer)
 				{
 					board_t* child = board_copy(board);
 					board_set(child, player, i, j);
-					value = MAX(value, minimax(child, player % 2 + 1, false));
+					value = MAX(value, minimax(child, player % 2 + 1, k, false));
 					board_delete(child);
 				}
 			}
@@ -488,7 +493,7 @@ minimax(board_t* board, const int player, const bool maximizingPlayer)
 				{
 					board_t* child = board_copy(board);
 					board_set(child, player, i, j);
-					value = MIN(value, minimax(child, player % 2 + 1, true));
+					value = MIN(value, minimax(child, player % 2 + 1, k, true));
 					board_delete(child);
 				}
 			}
@@ -500,6 +505,10 @@ minimax(board_t* board, const int player, const bool maximizingPlayer)
 move_t
 minimax_wrapper(board_t* board, const int player, const int k)
 {
+	/* Apply MiniMax rule to return a move to play without depth limit.
+	src : http://en.wikipedia.org/wiki/Minimax/
+	*/
+
 	move_t position;
 	position.line = -1;
 	position.column = -1;
@@ -518,14 +527,16 @@ minimax_wrapper(board_t* board, const int player, const int k)
 			{
 				if (verbose)
 				{
-					printf("[+] Checking <%i,%i> : ", i, j);
+					printf("[+] Checking <%i,%i>\n", i, j);
 				}
 
 				board_t* child = board_copy(board);
 				board_set(child, player, i, j);
-				if (value < minimax(child, player % 2 + 1, false))
+
+				int child_value = minimax(child, player % 2 + 1, k, false);
+				if (value < child_value)
 				{
-					value = minimax(child, player % 2 + 1, false);
+					value = child_value;
 					position.line = i;
 					position.column = j;
 				}
@@ -534,8 +545,406 @@ minimax_wrapper(board_t* board, const int player, const int k)
 
 				if (verbose)
 				{
-					printf("%i\n", value);
+					printf("[+] value = %i\n", value);
 				}
+			}
+		}
+	}
+
+	return position;
+}
+
+int
+minimax_alphabeta(board_t* board, const int player, const int k,
+	int alpha, int beta, const bool maximizingPlayer)
+{
+
+	if ((board_count_empty_cells(board) == 0) || (board_win(board, k) > 0))
+	{
+		if (maximizingPlayer)
+		{
+			return heuristic(board, player, k);
+		}
+		else
+		{
+			return heuristic(board, player % 2 + 1, k);
+		}
+	}
+
+	if (maximizingPlayer == true)
+	{
+		int value = INT_MIN;
+		for (int i = 1; i <= board->n; i++)
+		{
+			for (int j = 1; j <= board->m; j++)
+			{
+				if (board_get(board, i, j) == 0)
+				{
+					board_t* child = board_copy(board);
+					board_set(child, player, i, j);
+					value = MAX(value, minimax_alphabeta(child, player % 2 + 1, k, alpha, beta, false));
+					alpha = MAX(alpha, value);
+					board_delete(child);
+
+					if (alpha >= beta)
+					{
+						return value;
+					}
+				}
+			}
+		}
+		return value;
+	}
+	else
+	{
+		int value = INT_MAX;
+		for (int i = 1; i <= board->n; i++)
+		{
+			for (int j = 1; j <= board->m; j++)
+			{
+				if (board_get(board, i, j) == 0)
+				{
+					board_t* child = board_copy(board);
+					board_set(child, player, i, j);
+					value = MIN(value, minimax_alphabeta(child, player % 2 + 1, k, alpha, beta, true));
+					beta = MIN(beta, value);
+					board_delete(child);
+
+					if (beta <= alpha)
+					{
+						return value;
+					}
+				}
+			}
+		}
+		return value;
+	}
+}
+
+move_t
+minimax_alphabeta_wrapper(board_t* board, const int player, const int k)
+{
+	/* Apply MiniMax rule to return a move to play without depth limit.
+	src : http://en.wikipedia.org/wiki/Minimax/
+	*/
+
+	move_t position;
+	position.line = -1;
+	position.column = -1;
+
+	if ((board_count_empty_cells(board) == 0) || (board_win(board, k) > 0))
+	{
+		return position;
+	}
+
+	int value = INT_MIN;
+	int alpha = INT_MIN;
+	int beta = INT_MAX;
+
+	for (int i = 1; i <= board->n; i++)
+	{
+		for (int j = 1; j <= board->m; j++)
+		{
+			if (board_get(board, i, j) == 0)
+			{
+				if (verbose)
+				{
+					printf("[+] Checking <%i,%i>\n", i, j);
+				}
+
+				board_t* child = board_copy(board);
+				board_set(child, player, i, j);
+
+				int child_value = minimax_alphabeta(child, player % 2 + 1, k, alpha, beta, false);
+				if (value < child_value)
+				{
+					value =child_value;
+					position.line = i;
+					position.column = j;
+				}
+				alpha = MAX(alpha, value);
+
+				board_delete(child);
+
+				if (verbose)
+				{
+					printf("[+] value = %i\n", value);
+				}
+			}
+		}
+	}
+
+	return position;
+}
+
+int
+negamax(board_t* board, const int player, const int k)
+{
+	if ((board_count_empty_cells(board) == 0) || (board_win(board, k) > 0))
+	{
+		return heuristic(board, player, k);
+	}
+
+	int value = -1000;
+	for (int i = 1; i <= board->n; i++)
+	{
+		for (int j = 1; j <= board->m; j++)
+		{
+			if (board_get(board, i, j) == 0)
+			{
+				if (verbose)
+				{
+					printf("[+] Checking <%i,%i>\n", i, j);
+				}
+
+				board_t* child = board_copy(board);
+				board_set(child, player, i, j);
+				value = MAX(value, -1 * negamax(child, player % 2 + 1, k));
+				board_delete(child);
+
+				if (verbose)
+				{
+					printf("[+] value = %i\n", value);
+				}
+			}
+		}
+	}
+	return value;
+}
+
+move_t
+negamax_wrapper(board_t* board, const int player, const int k)
+{
+	/* Apply NegaMax rule to return a move to play without depth limit.
+	src : http://en.wikipedia.org/wiki/Negamax/
+	*/
+
+	move_t position;
+	position.line = -1;
+	position.column = -1;
+
+	if ((board_count_empty_cells(board) == 0) || (board_win(board, k) > 0))
+	{
+		return position;
+	}
+
+	int value = -1000;
+	for (int i = 1; i <= board->n; i++)
+	{
+		for (int j = 1; j <= board->m; j++)
+		{
+			if (board_get(board, i, j) == 0)
+			{
+				board_t* child = board_copy(board);
+				board_set(child, player, i, j);
+
+				int child_value = -1 * negamax(child, player % 2 + 1, k);
+				if (value < child_value)
+				{
+					value = child_value;
+					position.line = i;
+					position.column = j;
+				}
+				board_delete(child);
+			}
+		}
+	}
+	return position;
+}
+
+int
+negamax_alphabeta(board_t* board, const int player, const int k,
+	int alpha, int beta)
+{
+	if ((board_count_empty_cells(board) == 0) || (board_win(board, k) > 0))
+	{
+		return heuristic(board, player, k);
+	}
+
+	int value = -1000;
+	for (int i = 1; i <= board->n; i++)
+	{
+		for (int j = 1; j <= board->m; j++)
+		{
+			if (board_get(board, i, j) == 0)
+			{
+				board_t* child = board_copy(board);
+				board_set(child, player, i, j);
+				value = MAX(value, -1 * negamax_alphabeta(child, player % 2 + 1, k, -1 * beta, -1 * alpha));
+				alpha = MAX(alpha, value);
+				board_delete(child);
+
+				if (alpha >= beta)
+				{
+					return value;
+				}
+			}
+		}
+	}
+	return value;
+}
+
+move_t
+negamax_alphabeta_wrapper(board_t* board, const int player, const int k)
+{
+	/* Apply NegaMax rule to return a move to play without depth limit.
+	src : http://en.wikipedia.org/wiki/Negamax/
+	*/
+
+	move_t position;
+	position.line = -1;
+	position.column = -1;
+
+	if ((board_count_empty_cells(board) == 0) || (board_win(board, k) > 0))
+	{
+		// Return color x heuristic value
+		return position;
+	}
+
+	int value = -1000;
+	int alpha = -1000;
+	int beta = 1000;
+
+	for (int i = 1; i <= board->n; i++)
+	{
+		for (int j = 1; j <= board->m; j++)
+		{
+			if (board_get(board, i, j) == 0)
+			{
+				if (verbose)
+				{
+					printf("[+] Checking <%i,%i>\n", i, j);
+				}
+
+				board_t* child = board_copy(board);
+				board_set(child, player, i, j);
+
+				int child_value = -1 * negamax_alphabeta(child, player % 2 + 1, k,  -1 * beta, -1 * alpha);
+				if (value < child_value)
+				{
+					value = child_value;
+					position.line = i;
+					position.column = j;
+				}
+
+				alpha = MAX(alpha, value);
+				board_delete(child);
+
+				if (verbose)
+				{
+					printf("[+] value = %i\n", value);
+				}
+			}
+		}
+	}
+	return position;
+}
+
+int
+negascout(board_t* board, const int depth, const int player, const int k,
+	int alpha, int beta)
+{
+	if ((board_count_empty_cells(board) == 0) || (board_win(board, k) > 0) || depth == 0)
+	{
+		return heuristic(board, player, k);
+	}
+
+	int value = -1000;
+	bool first_child = true;
+	for (int i = 1; i <= board->n; i++)
+	{
+		for (int j = 1; j <= board->m; j++)
+		{
+			if (board_get(board, i, j) == 0)
+			{
+				board_t* child = board_copy(board);
+				board_set(child, player, i, j);
+
+				if (first_child == true)
+				{
+					first_child = false;
+					value = -1 * negascout(child, depth - 1, player % 2 + 1, k, -1 * beta, -1 * alpha);
+				} else
+				{
+					value = -1 * negascout(child, depth - 1, player % 2 + 1, k, -1 * alpha - 1, -1 * alpha);
+
+					if ((alpha < value) && (value < beta))
+					{
+						value = -1 * negascout(child, depth - 1, player % 2 + 1, k, -1 * beta, -1 * value);
+					}
+				}
+
+				alpha = MAX(alpha, value);
+
+				board_delete(child);
+
+				if (alpha >= beta)
+				{
+					return alpha;
+				}
+			}
+		}
+	}
+
+	return alpha;
+}
+
+move_t
+negascout_wrapper(board_t* board, const int player, const int k)
+{
+	/* Apply NegaMax rule to return a move to play without depth limit.
+	src : http://en.wikipedia.org/wiki/Negamax/
+	*/
+
+	move_t position;
+	position.line = -1;
+	position.column = -1;
+
+	if ((board_count_empty_cells(board) == 0) || (board_win(board, k) > 0))
+	{
+		// Return color x heuristic value
+		return position;
+	}
+
+	const int depth = 6;
+	int value = -1000;
+	int alpha = -1000;
+	int beta = 1000;
+	bool first_child = true;
+
+	for (int i = 1; i <= board->n; i++)
+	{
+		for (int j = 1; j <= board->m; j++)
+		{
+			if (board_get(board, i, j) == 0)
+			{
+				board_t* child = board_copy(board);
+				board_set(child, player, i, j);
+
+				if (first_child == true)
+				{
+					first_child = false;
+					value = -1 * negascout(child, depth, player % 2 + 1, k, -1 * beta, -1 * alpha);
+				} else
+				{
+					value = -1 * negascout(child, depth, player % 2 + 1, k, -1 * alpha - 1, -1 * alpha);
+
+					// assert(value < beta);
+					if (alpha < value)
+					{
+						value = -1 * negascout(child, depth, player % 2 + 1, k, -1 * beta, -1 * value);
+					}
+				}
+
+				if (value > alpha)
+				{
+					alpha = value;
+					position.line = i;
+					position.column = j;
+				}
+
+				board_delete(child);
+
 			}
 		}
 	}
@@ -715,7 +1124,7 @@ main(int argc, char* argv[])
 	{
 		/* Mode contest */
 		player_t* player = malloc(sizeof(player_t));
-		player->decision = &minimax_wrapper;
+		player->decision = &negascout_wrapper;
 
 		board_t* board = parse_input(player, input_file);
 
@@ -737,11 +1146,13 @@ main(int argc, char* argv[])
 
 		player_t* player1 = malloc(sizeof(player_t));
 		player1->label = PLAYER1;
-		player1->decision = &minimax_wrapper;
+		player1->decision = &negascout_wrapper;
 
 		player_t* player2 = malloc(sizeof(player_t));
 		player2->label = PLAYER2;
-		player2->decision = &minimax_wrapper;
+		player2->decision = &negascout_wrapper;
+
+		board_display(board, stdout);
 
 		while (board_count_empty_cells(board) > 0)
 		{
@@ -769,9 +1180,12 @@ main(int argc, char* argv[])
 				}
 			}
 
+			board_display(board, stdout);
+			printf("\n");
+
 			if (winner > 0)
 			{
-				printf("The winner is '%c' !\n",
+				printf("\nThe winner is '%c' !\n",
 					(winner == 1) ? PLAYER1 : PLAYER2);
 				free(player1);
 				free(player2);

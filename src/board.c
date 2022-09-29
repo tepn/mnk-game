@@ -381,77 +381,88 @@ board_win(const board_t* board, const int k)
 		return -1;
 	}
 
-	uint64_t win_mask = 0ULL;
+	uint64_t win_mask = (uint64_t) exp2(k) - 1;
 
-	for (int i = 0; i < k; i++)
+	/* Read horizontally */
+	for (int j = 0; j < board->m - k + 1; j++)
 	{
-		win_mask |= (1ULL << i);
+		for (int i = 0; i < board->n; i++)
+		{
+			if ((win_mask & board->player1->rotate0[i]) == win_mask)
+			{
+				return 1;
+			}
+			else if ((win_mask & board->player2->rotate0[i]) == win_mask)
+			{
+				return 2;
+			}
+		}
+
+		win_mask = win_mask << 1;
+
 	}
 
-	int i = 0;
-	while (i < board->m + board->n - 1)
+	win_mask = (uint64_t) exp2(k) - 1;
+
+	/* Read vertically */
+	for (int j = 0; j < board->n - k + 1; j++)
 	{
-		/* Read horizontally */
-		if (i < board->n)
+		for (int i = 0; i < board->m; i++)
 		{
-			for (int j = 0; j < board->n; j++)
-			{
-				if ((win_mask & board->player1->rotate0[j]) == win_mask)
-				{
-					return 1;
-				}
-				else if ((win_mask & board->player2->rotate0[j]) == win_mask)
-				{
-					return 2;
-				}
-			}
-		}
-
-		/* Read vertically */
-		if (i < board->m)
-		{
-			for (int j = 0; j < board->m; j++)
-			{
-				if ((win_mask & board->player1->rotate90[j]) == win_mask)
-				{
-					return 1;
-				}
-				else if ((win_mask & board->player2->rotate90[j]) == win_mask)
-				{
-					return 2;
-				}
-			}
-		}
-	
-		/* Read diagonally rotation left */
-		for (int j = 0; j < board->m + board->n - 1; j++)
-		{
-			if ((win_mask & board->player1->rotate45l[j]) == win_mask)
+			if ((win_mask & board->player1->rotate90[i]) == win_mask)
 			{
 				return 1;
 			}
-			else if ((win_mask & board->player2->rotate45l[j]) == win_mask)
-			{
-				return 2;
-			}
-		}
-	
-		/* Read diagonally rotation right */
-		for (int j = 0; j < board->m + board->n - 1; j++)
-		{
-			if ((win_mask & board->player1->rotate45r[j]) == win_mask)
-			{
-				return 1;
-			}
-			else if ((win_mask & board->player2->rotate45r[j]) == win_mask)
+			else if ((win_mask & board->player2->rotate90[i]) == win_mask)
 			{
 				return 2;
 			}
 		}
 
-		/* loop back */
-		i++;
 		win_mask = win_mask << 1;
+
+	}
+
+	win_mask = (uint64_t) exp2(k) - 1;
+
+	/* Read diagonally rotation left */
+	for (int j = 0; j < board->m + board->n - 1; j++)
+	{
+		for (int i = 0; i < board->m + board->n - 1; i++)
+		{
+			if ((win_mask & board->player1->rotate45l[i]) == win_mask)
+			{
+				return 1;
+			}
+			else if ((win_mask & board->player2->rotate45l[i]) == win_mask)
+			{
+				return 2;
+			}
+		}
+
+		win_mask = win_mask << 1;
+
+	}
+
+	win_mask = (uint64_t) exp2(k) - 1;
+
+	/* Read diagonally rotation right */
+	for (int j = 0; j < board->m + board->n - 1; j++)
+	{
+		for (int i = 0; i < board->m + board->n - 1; i++)
+		{
+			if ((win_mask & board->player1->rotate45r[i]) == win_mask)
+			{
+				return 1;
+			}
+			else if ((win_mask & board->player2->rotate45r[i]) == win_mask)
+			{
+				return 2;
+			}
+		}
+
+		win_mask = win_mask << 1;
+
 	}
 
 	return 0;

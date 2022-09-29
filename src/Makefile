@@ -3,8 +3,8 @@ EXE=mnk-game
 EXEGDB=$(EXE)-debug
 
 # Compilation Flags
-CFLAGS=-Wall -Wextra -Werror -std=c99 -O2
-CPPFLAGS=-I ../include
+CFLAGS=-Wall -Wextra -Werror -std=c99
+CPPFLAGS=-I ../include -O2
 LDFLAGS=-lm
 GDBFLAGS=-g -DDEBUG
 
