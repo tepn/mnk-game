@@ -27,6 +27,7 @@ Allow to play to mnk-games with chosen values for m, n or k.
  -0, --all-ai        set both player to be an AI
  -1, --player1-ai    set first player as an AI
  -2, --player2-ai    set second player as an AI
+ -3, --no-ai         set both player as human (default)
  -c, --contest FILE  enable 'contest mode'
  -v, --verbose       verbose output
  -V, --version       display version and exit
