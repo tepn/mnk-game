@@ -426,9 +426,9 @@ board_win(const board_t* board, const int k)
 	win_mask = (uint64_t) exp2(k) - 1;
 
 	/* Read diagonally rotation left */
-	for (int j = 0; j < board->m + board->n - 1; j++)
+	for (int j = k - 1; j < board->m + board->n - k; j++)
 	{
-		for (int i = 0; i < board->m + board->n - 1; i++)
+		for (int i = k - 1; i < board->m + board->n - k; i++)
 		{
 			if ((win_mask & board->player1->rotate45l[i]) == win_mask)
 			{
@@ -447,9 +447,9 @@ board_win(const board_t* board, const int k)
 	win_mask = (uint64_t) exp2(k) - 1;
 
 	/* Read diagonally rotation right */
-	for (int j = 0; j < board->m + board->n - 1; j++)
+	for (int j = k - 1; j < board->m + board->n - k; j++)
 	{
-		for (int i = 0; i < board->m + board->n - 1; i++)
+		for (int i = k - 1; i < board->m + board->n - k; i++)
 		{
 			if ((win_mask & board->player1->rotate45r[i]) == win_mask)
 			{
